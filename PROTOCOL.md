@@ -21,7 +21,7 @@ To request portions of the file, its serial, and its size.
 
 ```
 {
-  "msg": "syncme",
+  "msg": "sync",
   "beg": 0,
   "end": -1
 }
@@ -69,7 +69,7 @@ A response to an edit message that was accepted. These may arrive at any time fr
 
 ```
 {
-  "msg": "edited",
+  "msg": "edit",
   "ser": 1234,
   "beg": 0,
   "end": 100,
@@ -85,7 +85,7 @@ A response to an edit message that was rejected.
 
 ```
 {
-  "msg": "editconf",
+  "msg": "nope",
   "ser": 1235
 }
 ```

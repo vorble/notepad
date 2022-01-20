@@ -9,7 +9,12 @@
   "author": "",
   "license": "UNLICENSED",
   "private": true,
+  "engines": {
+    "node": ">=16"
+  },
   "dependencies": {
-    "express": "^4.17.2"
+    "express": "^4.17.2",
+    "express-ws": "^5.0.2",
+    "ws": "^8.4.2"
   }
 }
