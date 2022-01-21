@@ -1,14 +1,75 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const Express = require('express');
 const app = new Express();
 const expressWs = require('express-ws')(app); // Gotta come before routes.
 
+const NOTEPAD_DIR = process.env.NOTEPAD_DIR || path.join(__dirname, 'data');
+
 function validateFilename(filename) {
-  if (!/^[A-Z-09]{1,32}$/.test(filename)) {
-    throw new NotesProtocolError(`Invalid filename.`);
+  if (!/^[a-zA-Z0-9]{1,32}$/.test(filename)) {
+    throw new Error(`Invalid filename ${ JSON.stringify(filename) }.`);
   }
+}
+
+function scary_deleteOldSer(thedir) {
+  let topser = -1;
+  let foundser = false;
+  let toDelete = [];
+  for (const _ser of fs.readdirSync(thedir)) {
+    const ser = parseInt(_ser);
+    if (ser == _ser) {
+      if (ser > topser) {
+        toDelete.push(_ser);
+        topser = ser;
+        foundser = true;
+      }
+    }
+  }
+  toDelete.splice(Math.max(0, toDelete.length - 5));
+  for (const ser of toDelete) { 
+    fs.unlinkSync(path.join(thedir, '' + ser));
+  }
+  return foundser ? topser : 0;
+}
+
+function checkTheDir(filename) {
+  validateFilename(filename);
+  const thedir = path.join(NOTEPAD_DIR, filename);
+  try {
+    const thedirStat = fs.statSync(thedir);
+    if (!thedirStat.isDirectory()) {
+      throw new Error('Filename ' + JSON.stringify(filename) + ' is not a directory.'); 
+    }
+  } catch (err) {
+    if (err.code != 'ENOENT') {
+      throw err;
+    }
+    fs.mkdirSync(thedir);
+  }
+  return thedir;
+}
+
+function loadFile(filename) {
+  const thedir = checkTheDir(filename);
+  const ser = scary_deleteOldSer(thedir);
+  try {
+    const txt = fs.readFileSync(path.join(thedir,'' + ser), { encoding: 'utf-8' });
+    return { ser, txt };
+  } catch (err) {
+    if (err.code != 'ENOENT') {
+      throw err;
+    }
+    return { ser, txt: '' };
+  }
+}
+
+function saveFile(filename, ser, txt) {
+  //console.log('Save file: ' + path.join(NOTEPAD_DIR, filename, '' + ser));
+  fs.writeFileSync(path.join(NOTEPAD_DIR, filename, '' + ser), txt);
+  scary_deleteOldSer(path.join(NOTEPAD_DIR, filename));
 }
 
 // TODO: Make this isomorphic.
@@ -43,7 +104,6 @@ const DIFF = `  function diff(a, b) {
     --ienda;
     --iendb;
   }
-  console.log(istart, ienda, iendb);
   // [header, oldstuff, newstuff, footer]
   return [
     a.slice(0, istart), a.slice(istart, ienda),
@@ -58,85 +118,104 @@ app.get('/', (req, res) => {
   res.send('<pre>' + new Date().getTime());
 });
 
-let g_txt = 'this is the text\n';
-let g_ser = 0;
-let sockets = [];
+//let file.txt = 'this is the text\n';
+//let file.ser = 0;
+
+let files = new Map();
 
 // File names can have only A-Z, 0-9, and period.
 app.ws('/:filename', (ws, req) => {
-  sockets.push(ws);
+  try {
+    const filename = req.params.filename;
 
-  console.log('got connection');
-
-  function enterFailState() {
-    ws.close(); // TODO: Harder?!
-  }
-
-  function onsync(m) {
-    requireField(m,'beg','number');
-    requireField(m,'end','number');
-    // TODO: Integers -1 to max int are acceptable. No floats, no specials.
-    ws.send(JSON.stringify({
-      msg: 'sync',
-      ser: g_ser,
-      txt: m.end == -1 ? g_txt.slice(m.beg) : g_txt.slice(m.beg, m.end),
-      siz: g_txt.length,
-    }));
-  }
-
-  function onedit(m) {
-    const nextSer = g_ser + 1;
-    if (m.ser === nextSer) {
-      const orig = g_txt;
-      g_txt = applyEdit(g_txt, m.beg, m.end, m.txt);
-      console.log('EDIT ' + JSON.stringify(m));
-      console.log('FROM ' + JSON.stringify(orig));
-      console.log('TO   ' + JSON.stringify(g_txt));
-      ++g_ser;
-      ws.send(JSON.stringify({
-        msg: 'okay',
-        ser: g_ser,
-      }));
-      const [header, oldstuff, newstuff, footer] = diff(orig, g_txt);
-      const edit = {
-        msg: 'edit',
-        ser: g_ser,
-        beg: header.length,
-        end: header.length + oldstuff.length,
-        txt: m.txt,
-      };
-      for (const socket of sockets) {
-        if (socket == ws) continue;
-        socket.send(JSON.stringify(edit));
-      }
+    let file = files.get(filename);
+    if (file == null) {
+      file = loadFile(filename);
+      file.sockets = [ws];
+      files.set(filename, file);
     } else {
+      file.sockets.push(ws);
+    }
+
+    console.log('got connection to '+ filename, file.sockets.length);
+
+    function enterFailState() {
+      ws.close(); // TODO: Harder?!
+    }
+
+    function onsync(m) {
+      requireField(m,'beg','number');
+      requireField(m,'end','number');
+      // TODO: Integers -1 to max int are acceptable. No floats, no specials.
       ws.send(JSON.stringify({
-        msg: 'nope',
-        ser: m.ser,
+        msg: 'sync',
+        ser: file.ser,
+        txt: m.end == -1 ? file.txt.slice(m.beg) : file.txt.slice(m.beg, m.end),
+        siz: file.txt.length,
       }));
     }
-  }
 
-  ws.on('message', (m) => {
-    try {
-      m = JSON.parse(m);
-      requireField(m, 'msg', 'string');
-      switch (m.msg) {
-        case 'sync': onsync(m); break;
-        case 'edit': onedit(m); break;
-        default: console.log('ERROR: Unhandled msg = ' + m.msg + '.'); break;
+    function onedit(m) {
+      const nextSer = file.ser + 1;
+      if (m.ser === nextSer) {
+        const orig = file.txt;
+        const updated = applyEdit(file.txt, m.beg, m.end, m.txt);
+        saveFile(filename, nextSer, updated);
+        file.txt = updated;
+        file.ser = nextSer;
+//        console.log('EDIT ' + JSON.stringify(m));
+//        console.log('FROM ' + JSON.stringify(orig));
+//        console.log('TO   ' + JSON.stringify(file.txt));
+        ws.send(JSON.stringify({
+          msg: 'okay',
+          ser: file.ser,
+        }));
+        const [header, oldstuff, newstuff, footer] = diff(orig, file.txt);
+        const edit = {
+          msg: 'edit',
+          ser: file.ser,
+          beg: header.length,
+          end: header.length + oldstuff.length,
+          txt: m.txt,
+        };
+        for (const socket of file.sockets) {
+          if (socket == ws) continue;
+          socket.send(JSON.stringify(edit));
+        }
+      } else {
+        ws.send(JSON.stringify({
+          msg: 'nope',
+          ser: m.ser,
+        }));
       }
-    } catch (err) {
-      console.error(err);
-      enterFailState();
-      return;
     }
-    console.log(m);
-  });
 
-  ws.on('close', () => {
-    sockets = sockets.filter(s => s != ws);
-  });
+    ws.on('message', (m) => {
+      try {
+        m = JSON.parse(m);
+        requireField(m, 'msg', 'string');
+        switch (m.msg) {
+          case 'sync': onsync(m); break;
+          case 'edit': onedit(m); break;
+          default: console.log('ERROR: Unhandled msg = ' + m.msg + '.'); break;
+        }
+      } catch (err) {
+        console.error(err);
+        enterFailState();
+      }
+      //console.log(m);
+    });
+
+    ws.on('close', () => {
+      try {
+        file.sockets = file.sockets.filter(s => s != ws);
+      } catch (err) {
+        console.log(err);
+      }
+    });
+  } catch (err) {
+    console.error(err);
+  }
 });
 
 app.get('/:filename', (req, res) => {
@@ -165,43 +244,21 @@ textarea {
   height: calc(100vh - 4px);
 }
 .fail {
-  background: red;
+  background-color: #F99;
+}
+.saving {
+  background-color: #F0F0FF;
+}
+.connected {
+  background-color: #FFF;
+}
+.disconnected {
+  background-color: #CCC;
 }
 </style>
 <body>
 <textarea id="textarea"></textarea>
 <script>
-/*
-  function load() {
-    var http = new XMLHttpRequest();
-    var url = 'load';
-    http.open('POST', url, true);
-    http.onreadystatechange = function() {
-      //console.log(http);
-      if (http.readyState == 4 && http.status == 200) {
-        textarea.value = http.response;
-      }
-    }
-    http.send();
-  }
-  function save(text) {
-    var http = new XMLHttpRequest();
-    var url = 'save';
-    http.open('POST', url, true);
-    http.setRequestHeader('Content-type', 'application/octet-stream');
-    http.onreadystatechange = function() {
-      //console.log(http);
-      if (http.readyState == 4) {
-        console.log('save(): POST received ' + http.status + ' response.');
-        if (http.status >= 400) {
-          console.error(http);
-        }
-      }
-    }
-    http.send(text);
-  }
-  load();
-  */
   ${ REQUIRE_FIELD }
   ${ APPLY_EDIT }
   ${ DIFF }
@@ -232,6 +289,7 @@ textarea {
       txt: newstuff,
     };
     socket.send(JSON.stringify(thisEdit));
+    textarea.className = 'saving';
   }
 
   function enterFailState(why) {
@@ -241,7 +299,7 @@ textarea {
     } catch (err) {
       console.log(err); // Errors stop here.
     }
-    textarea.classList.add('fail');
+    textarea.className = 'fail';
   }
 
   function onsync(m) {
@@ -300,11 +358,13 @@ textarea {
     global_ser = thisEdit.ser;
     global_txt = applyEdit(global_txt, thisEdit.beg, thisEdit.end, thisEdit.txt);
     thisEdit = null;
+    textarea.className = 'connected';
   }
 
-  let socket = new WebSocket(location.href.replace(/^https?:/,'ws:'));
+  let socket = new WebSocket(location.href.replace(/^http:/,'ws:').replace(/^https:/,'wss:'));
   socket.onopen = () => {
     socket.send(JSON.stringify({msg:'sync',beg:0,end:-1}));
+    textarea.className = 'connected';
   };
   socket.onmessage = (m) => {
     if (DEBUG) console.log('DEBUG:', m);
@@ -336,4 +396,4 @@ textarea {
 }
 */
 
-app.listen(7777);
+app.listen(7777, '127.0.0.1');
