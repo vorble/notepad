@@ -63,6 +63,19 @@ To replace a portion of the file.
 
 ### Edited Message
 
+A response to an edit message that was accepted.
+
+* Server to Client
+
+```
+{
+  "msg": "okay",
+  "ser": 1235,
+}
+```
+
+### Edited Message
+
 A response to an edit message that was accepted. These may arrive at any time from other user activity.
 
 * Server to Client
