@@ -118,9 +118,6 @@ app.get('/', (req, res) => {
   res.send('<pre>' + new Date().getTime());
 });
 
-//let file.txt = 'this is the text\n';
-//let file.ser = 0;
-
 let files = new Map();
 
 // File names can have only A-Z, 0-9, and period.
@@ -257,7 +254,7 @@ textarea {
 }
 </style>
 <body>
-<textarea id="textarea"></textarea>
+<textarea id="textarea" class="disconnected"></textarea>
 <script>
   ${ REQUIRE_FIELD }
   ${ APPLY_EDIT }
@@ -382,18 +379,11 @@ textarea {
       enterFailState();
     }
   };
+  socket.onclose = () => {
+    textarea.className = 'disconnected';
+  };
 </script>
 `);
 });
-
-/*
-{
-  "msg": "edit",
-  "ser": 1234,
-  "beg": 0,
-  "end": 100,
-  "txt": "..."
-}
-*/
 
 app.listen(7777, '127.0.0.1');
