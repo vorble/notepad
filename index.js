@@ -319,7 +319,19 @@ textarea {
       return;
     }
     if (thisEdit == null) {
+      // TODO: Sortof duplicated with below.
+      let selstart = textarea.selectionStart;
+      let selend = textarea.selectionEnd;
+      const delta = m.txt.length - (m.end - m.beg);
+      if (m.beg <= selstart) {
+        selstart += delta;
+      }
+      if (m.end <= selend) {
+        selend += delta;
+      }
       textarea.value = global_txt;
+      textarea.selectionStart = selstart;
+      textarea.selectionEnd = selend;
     } else {
       if (thisEdit.beg <= m.beg && thisEdit.end > m.beg) {
         enterFailState('Overlapping edits 1');
@@ -331,14 +343,18 @@ textarea {
           thisEdit.beg += delta;
           thisEdit.end += delta;
         }
-        if (m.beg <= textarea.selectionStart) {
-          textarea.selectionStart += delta;
+        let selstart = textarea.selectionStart;
+        let selend = textarea.selectionEnd;
+        if (m.beg <= selstart) {
+          selstart += delta;
         }
-        if (m.end <= textarea.selectionEnd) {
-          textarea.selectionEnd += delta;
+        if (m.end <= selend) {
+          selend += delta;
         }
         thisEdit.ser = nextSer + 1;
         textarea.value = applyEdit(global_txt, thisEdit.beg, thisEdit.end, thisEdit.txt);
+        textarea.selectionStart = selstart;
+        textarea.selectionEnd = selend;
       }
     }
   }
