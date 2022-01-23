@@ -72,8 +72,6 @@ function saveFile(filename, ser, txt) {
   scary_deleteOldSer(path.join(NOTEPAD_DIR, filename));
 }
 
-// TODO: Make this isomorphic.
-class NotesProtocolError extends Error {}
 const REQUIRE_FIELD = `function requireField(obj, field, withType) {
   if (Object.keys(obj).indexOf(field) < 0) {
     throw new NotesProtocolError('Missing required field ' + field + ' with type ' + withType + '.');
@@ -222,23 +220,28 @@ app.get('/:filename', (req, res) => {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Notes</title>
 <style>
-body, html, textarea {
+body, html  {
   margin-top: 0px;
   margin-bottom: 0px;
   margin-left: 0px;
   margin-right: 0px;
 }
 textarea {
+  margin-top: .5em;
+  margin-bottom: .5em;
+  margin-left: 1ch;
+  margin-right: 1ch;
+
   padding-top: 0px;
   padding-bottom: 0px;
   padding-left: 0px;
   padding-right: 0px;
 
+  width: calc(100vw - 2ch);
+  height: calc(100vh - 1em);
+
   border: none;
   resize: none;
-
-  width: calc(100vw - 4px);
-  height: calc(100vh - 4px);
 }
 .fail {
   background-color: #F99;
@@ -256,10 +259,12 @@ textarea {
 <body>
 <textarea id="textarea" class="disconnected"></textarea>
 <script>
+  'use strict';
   ${ REQUIRE_FIELD }
   ${ APPLY_EDIT }
   ${ DIFF }
-  let DEBUG = true; // TODO: For now.
+  let DEBUG = false;
+  let connected = false;
   let global_txt = '';
   let global_ser = 0;
   let thisEdit = null;
@@ -271,6 +276,9 @@ textarea {
   }
 
   function doedit() {
+    if (!connected) {
+      return;
+    }
     if (thisEdit != null) {
       return; // the handler for 'nope' will call doedit() again.
     }
@@ -318,45 +326,46 @@ textarea {
       enterFailState('Expected ser ' + nextSer);
       return;
     }
+    
+    let selstart = textarea.selectionStart;
+    let selend = textarea.selectionEnd;
+    const delta = m.txt.length - (m.end - m.beg);
+    if (m.end <= selstart) {
+      selstart += delta;
+      selend += delta;
+    } else if (m.end <= selend && textarea.selectionDirection == 'forward') {
+      selend += delta;
+      selstart = selend;
+    } else if (m.end <= selend) {
+      selend = selstart = m.beg + m.txt.length; // End of the new segment.
+    } else if (m.beg < selend && textarea.selectionDirectoin == 'forward') {
+      selend = selstart = m.beg + m.txt.length; // End of the new segment.
+    } else if (m.beg < selend) {
+    } else if (m.beg >= selend) {
+    } else { 
+      if (DEBUG) console.log(selstart, selend, m, delta);
+      return enterFailState('Selection overlap cases are not exhaustive!');
+    }
+
     if (thisEdit == null) {
-      // TODO: Sortof duplicated with below.
-      let selstart = textarea.selectionStart;
-      let selend = textarea.selectionEnd;
-      const delta = m.txt.length - (m.end - m.beg);
-      if (m.beg <= selstart) {
-        selstart += delta;
-      }
-      if (m.end <= selend) {
-        selend += delta;
-      }
       textarea.value = global_txt;
-      textarea.selectionStart = selstart;
-      textarea.selectionEnd = selend;
     } else {
       if (thisEdit.beg <= m.beg && thisEdit.end > m.beg) {
         enterFailState('Overlapping edits 1');
       } else if (m.beg < thisEdit.beg && m.end > thisEdit.beg) {
         enterFailState('Overlapping edits 2');
       } else {
-        const delta = m.txt.length - (m.end - m.beg);
         if (m.beg < thisEdit.beg) {
           thisEdit.beg += delta;
           thisEdit.end += delta;
         }
-        let selstart = textarea.selectionStart;
-        let selend = textarea.selectionEnd;
-        if (m.beg <= selstart) {
-          selstart += delta;
-        }
-        if (m.end <= selend) {
-          selend += delta;
-        }
         thisEdit.ser = nextSer + 1;
         textarea.value = applyEdit(global_txt, thisEdit.beg, thisEdit.end, thisEdit.txt);
-        textarea.selectionStart = selstart;
-        textarea.selectionEnd = selend;
       }
     }
+
+    textarea.selectionStart = selstart;
+    textarea.selectionEnd = selend;
   }
 
   function onnope(m) {
@@ -371,6 +380,7 @@ textarea {
     global_ser = thisEdit.ser;
     global_txt = applyEdit(global_txt, thisEdit.beg, thisEdit.end, thisEdit.txt);
     thisEdit = null;
+    doedit();
     textarea.className = 'connected';
   }
 
@@ -378,9 +388,10 @@ textarea {
   socket.onopen = () => {
     socket.send(JSON.stringify({msg:'sync',beg:0,end:-1}));
     textarea.className = 'connected';
+    connected = true;
   };
   socket.onmessage = (m) => {
-    if (DEBUG) console.log('DEBUG:', m);
+    if (DEBUG) console.log('onmessage:', m);
     try {
       m = JSON.parse(m.data); // TODO: If error, close socket?
       requireField(m,'msg','string');
@@ -396,7 +407,10 @@ textarea {
     }
   };
   socket.onclose = () => {
-    textarea.className = 'disconnected';
+    connected = false;
+    if (textarea.className != 'fail') {
+      textarea.className = 'disconnected';
+    }
   };
 </script>
 `);
