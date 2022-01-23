@@ -217,7 +217,7 @@ app.get('/:filename', (req, res) => {
   res.send(`<!doctype html>
 <html>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0,maximum-scale=1.0, user-scalable=0">
 <title>Notes</title>
 <style>
 body, html  {
@@ -275,26 +275,34 @@ textarea {
     doedit();
   }
 
-  function doedit() {
-    if (!connected) {
-      return;
-    }
-    if (thisEdit != null) {
-      return; // the handler for 'nope' will call doedit() again.
-    }
+  function calculateEdit() {
     const [header, oldstuff, newstuff, footer] = diff(global_txt, textarea.value);
     if (oldstuff.length == 0 && newstuff.length == 0) {
-      return; // No edit.
+      return null;
     }
-    thisEdit = {
+    return {
       msg: 'edit',
       ser: global_ser + 1,
       beg: header.length,
       end: header.length + oldstuff.length,
       txt: newstuff,
     };
-    socket.send(JSON.stringify(thisEdit));
-    textarea.className = 'saving';
+  }
+
+  function doedit() {
+    if (!connected) {
+      return;
+    }
+    if (thisEdit != null) {
+      return;
+    }
+    thisEdit = calculateEdit();
+    if (thisEdit == null) {
+      textarea.className = 'connected';
+    } else {
+      socket.send(JSON.stringify(thisEdit));
+      textarea.className = 'saving';
+    }
   }
 
   function enterFailState(why) {
@@ -318,18 +326,20 @@ textarea {
   }
 
   function onedit(m) {
+    const dirty = calculateEdit();
+
     const nextSer = global_ser + 1;
     if (m.ser === nextSer) {
       global_txt = applyEdit(global_txt, m.beg, m.end, m.txt);
       global_ser = m.ser;
     } else {
-      enterFailState('Expected ser ' + nextSer);
-      return;
+      return enterFailState('Expected ser ' + nextSer);
     }
+
+    const delta = m.txt.length - (m.end - m.beg);
     
     let selstart = textarea.selectionStart;
     let selend = textarea.selectionEnd;
-    const delta = m.txt.length - (m.end - m.beg);
     if (m.end <= selstart) {
       selstart += delta;
       selend += delta;
@@ -347,21 +357,18 @@ textarea {
       return enterFailState('Selection overlap cases are not exhaustive!');
     }
 
-    if (thisEdit == null) {
-      textarea.value = global_txt;
-    } else {
-      if (thisEdit.beg <= m.beg && thisEdit.end > m.beg) {
-        enterFailState('Overlapping edits 1');
-      } else if (m.beg < thisEdit.beg && m.end > thisEdit.beg) {
-        enterFailState('Overlapping edits 2');
+    if (dirty) {
+      if (m.end > dirty.beg && m.beg <= dirty.end) {
+        return enterFailState('Overlapping edits.');
       } else {
-        if (m.beg < thisEdit.beg) {
-          thisEdit.beg += delta;
-          thisEdit.end += delta;
+        if (m.end < dirty.beg) {
+          dirty.beg += delta;
+          dirty.end += delta;
         }
-        thisEdit.ser = nextSer + 1;
-        textarea.value = applyEdit(global_txt, thisEdit.beg, thisEdit.end, thisEdit.txt);
+        textarea.value = applyEdit(global_txt, dirty.beg, dirty.end, dirty.txt);
       }
+    } else {
+      textarea.value = global_txt;
     }
 
     textarea.selectionStart = selstart;
@@ -370,18 +377,21 @@ textarea {
 
   function onnope(m) {
     if (thisEdit == null) {
-      enterFailState('No pending edit.');
-    } else {
-      doedit();
+      return enterFailState('No pending edit.');
     }
+    thisEdit = null;
+    doedit();
   }
 
   function onokay(m) {
-    global_ser = thisEdit.ser;
+    if (thisEdit == null) {
+      return enterFailState('No pending edit.');
+    }
+    global_ser = m.ser;
     global_txt = applyEdit(global_txt, thisEdit.beg, thisEdit.end, thisEdit.txt);
     thisEdit = null;
-    doedit();
     textarea.className = 'connected';
+    doedit();
   }
 
   let socket = new WebSocket(location.href.replace(/^http:/,'ws:').replace(/^https:/,'wss:'));
