@@ -21,15 +21,16 @@ function scary_deleteOldSer(thedir) {
   for (const _ser of fs.readdirSync(thedir)) {
     const ser = parseInt(_ser);
     if (ser == _ser) {
+      toDelete.push(ser);
+      foundser = true
       if (ser > topser) {
-        toDelete.push(_ser);
         topser = ser;
-        foundser = true;
       }
     }
   }
-  toDelete.splice(Math.max(0, toDelete.length - 5));
-  for (const ser of toDelete) { 
+  toDelete.sort((a, b) => a - b);
+  toDelete.length = Math.max(0, toDelete.length - 5);
+  for (const ser of toDelete) {
     fs.unlinkSync(path.join(thedir, '' + ser));
   }
   return foundser ? topser : 0;
@@ -41,7 +42,7 @@ function checkTheDir(filename) {
   try {
     const thedirStat = fs.statSync(thedir);
     if (!thedirStat.isDirectory()) {
-      throw new Error('Filename ' + JSON.stringify(filename) + ' is not a directory.'); 
+      throw new Error('Filename ' + JSON.stringify(filename) + ' is not a directory.');
     }
   } catch (err) {
     if (err.code != 'ENOENT') {
@@ -337,7 +338,7 @@ textarea {
     }
 
     const delta = m.txt.length - (m.end - m.beg);
-    
+
     let selstart = textarea.selectionStart;
     let selend = textarea.selectionEnd;
     if (m.end <= selstart) {
@@ -352,7 +353,7 @@ textarea {
       selend = selstart = m.beg + m.txt.length; // End of the new segment.
     } else if (m.beg < selend) {
     } else if (m.beg >= selend) {
-    } else { 
+    } else {
       if (DEBUG) console.log(selstart, selend, m, delta);
       return enterFailState('Selection overlap cases are not exhaustive!');
     }
