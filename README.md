@@ -10,7 +10,7 @@ The suggested usage of this software is behind an HTTPS reverse-proxy with an ob
 * Edits from other users show up in real time.
 * Some effort is made to keep your cursor in the right place during concurrent edits, but don't expect perfection.
 * If the connection is lost, the editor area is gray.
-* If your edit conflicts with another edit, the editor area is gray.
+* If your edit conflicts with another edit, the editor area is red.
 * If the editor area isn't blue or white, then you should reload the page to resume editing.
 
 ### Running
