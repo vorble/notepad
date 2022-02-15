@@ -4,9 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const Express = require('express');
 const app = new Express();
-const expressWs = require('express-ws')(app); // Gotta come before routes.
+
+require('express-ws')(app); // Must come before routes.
 
 const NOTEPAD_DIR = process.env.NOTEPAD_DIR || path.join(__dirname, 'data');
+
+console.log('NOTEPAD_DIR=' + NOTEPAD_DIR);
 
 function validateFilename(filename) {
   if (!/^[a-zA-Z0-9]{1,32}$/.test(filename)) {
@@ -68,7 +71,6 @@ function loadFile(filename) {
 }
 
 function saveFile(filename, ser, txt) {
-  //console.log('Save file: ' + path.join(NOTEPAD_DIR, filename, '' + ser));
   fs.writeFileSync(path.join(NOTEPAD_DIR, filename, '' + ser), txt);
   scary_deleteOldSer(path.join(NOTEPAD_DIR, filename));
 }
@@ -133,10 +135,10 @@ app.ws('/:filename', (ws, req) => {
       file.sockets.push(ws);
     }
 
-    console.log('got connection to '+ filename, file.sockets.length);
+    //console.log('got connection to '+ filename, file.sockets.length);
 
     function enterFailState() {
-      ws.close(); // TODO: Harder?!
+      ws.close();
     }
 
     function onsync(m) {
@@ -159,9 +161,6 @@ app.ws('/:filename', (ws, req) => {
         saveFile(filename, nextSer, updated);
         file.txt = updated;
         file.ser = nextSer;
-//        console.log('EDIT ' + JSON.stringify(m));
-//        console.log('FROM ' + JSON.stringify(orig));
-//        console.log('TO   ' + JSON.stringify(file.txt));
         ws.send(JSON.stringify({
           msg: 'okay',
           ser: file.ser,
@@ -199,7 +198,6 @@ app.ws('/:filename', (ws, req) => {
         console.error(err);
         enterFailState();
       }
-      //console.log(m);
     });
 
     ws.on('close', () => {
@@ -404,7 +402,7 @@ textarea {
   socket.onmessage = (m) => {
     if (DEBUG) console.log('onmessage:', m);
     try {
-      m = JSON.parse(m.data); // TODO: If error, close socket?
+      m = JSON.parse(m.data);
       requireField(m,'msg','string');
       switch (m.msg) {
         case 'sync': onsync(m); break;
