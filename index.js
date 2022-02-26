@@ -8,8 +8,12 @@ const app = new Express();
 require('express-ws')(app); // Must come before routes.
 
 const NOTEPAD_DIR = process.env.NOTEPAD_DIR || path.join(__dirname, 'data');
+const LISTEN_PORT = process.env.LISTEN_PORT || 7777;
+const LISTEN_HOST = process.env.LISTEN_HOST || '127.0.0.1';
 
 console.log('NOTEPAD_DIR=' + NOTEPAD_DIR);
+console.log('LISTEN_PORT=' + LISTEN_PORT);
+console.log('LISTEN_HOST=' + LISTEN_HOST);
 
 function validateFilename(filename) {
   if (!/^[a-zA-Z0-9]{1,32}$/.test(filename)) {
@@ -124,6 +128,10 @@ let files = new Map();
 // File names can have only A-Z, 0-9, and period.
 app.ws('/:filename', (ws, req) => {
   try {
+    const pinger = setInterval(() => {
+      ws.ping();
+    }, 10 * 1000)
+
     const filename = req.params.filename;
 
     let file = files.get(filename);
@@ -201,6 +209,7 @@ app.ws('/:filename', (ws, req) => {
     });
 
     ws.on('close', () => {
+      clearInterval(pinger);
       try {
         file.sockets = file.sockets.filter(s => s != ws);
       } catch (err) {
@@ -425,4 +434,4 @@ textarea {
 `);
 });
 
-app.listen(7777, '127.0.0.1');
+app.listen(LISTEN_PORT, LISTEN_HOST);
