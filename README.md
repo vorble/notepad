@@ -21,6 +21,14 @@ The suggested usage of this software is behind an HTTPS reverse-proxy with an ob
 * Browse to `http://127.0.0.1:7777/your_file_name` to edit the file.
 * File contents are placed in a directory with the resource name from the URL and are numbered by the edit's serial counter.
 
+### Options
+
+You may set the following environment variables to configure the application:
+
+* `NOTEPAD_DIR` - To tell the application where to save files.
+* `LISTEN_PORT` - To tell the application which port to listen on.
+* `LISTEN_ADDRESS` - To tell the application which address to listen on.
+
 ### More Info
 
 * Check out the [Notes Protocol](PROTOCOL.md) for the communication protocol.

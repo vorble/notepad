@@ -9,11 +9,11 @@ require('express-ws')(app); // Must come before routes.
 
 const NOTEPAD_DIR = process.env.NOTEPAD_DIR || path.join(__dirname, 'data');
 const LISTEN_PORT = process.env.LISTEN_PORT || 7777;
-const LISTEN_HOST = process.env.LISTEN_HOST || '127.0.0.1';
+const LISTEN_ADDRESS = process.env.LISTEN_ADDRESS || '127.0.0.1';
 
 console.log('NOTEPAD_DIR=' + NOTEPAD_DIR);
 console.log('LISTEN_PORT=' + LISTEN_PORT);
-console.log('LISTEN_HOST=' + LISTEN_HOST);
+console.log('LISTEN_ADDRESS=' + LISTEN_ADDRESS);
 
 function validateFilename(filename) {
   if (!/^[a-zA-Z0-9]{1,32}$/.test(filename)) {
@@ -255,7 +255,7 @@ textarea {
   background-color: #F99;
 }
 .saving {
-  background-color: #F0F0FF;
+  background-color: #F6F6FF;
 }
 .connected {
   background-color: #FFF;
@@ -297,6 +297,19 @@ textarea {
     };
   }
 
+  let fadeOutSavingTimer = 0;
+  function fadeOutSaving() {
+    if (fadeOutSavingTimer != 0) {
+      clearTimeout(fadeOutSavingTimer);
+      fadeOutSavingTimer = 0;
+    }
+    fadeOutSavingTimer = setTimeout(() => {
+      if (textarea.className == 'saving') {
+        textarea.className = 'connected';
+      }
+    }, 1000);
+  }
+
   function doedit() {
     if (!connected) {
       return;
@@ -306,7 +319,7 @@ textarea {
     }
     thisEdit = calculateEdit();
     if (thisEdit == null) {
-      textarea.className = 'connected';
+      fadeOutSaving();
     } else {
       socket.send(JSON.stringify(thisEdit));
       textarea.className = 'saving';
@@ -398,7 +411,6 @@ textarea {
     global_ser = m.ser;
     global_txt = applyEdit(global_txt, thisEdit.beg, thisEdit.end, thisEdit.txt);
     thisEdit = null;
-    textarea.className = 'connected';
     doedit();
   }
 
@@ -434,4 +446,4 @@ textarea {
 `);
 });
 
-app.listen(LISTEN_PORT, LISTEN_HOST);
+app.listen(LISTEN_PORT, LISTEN_ADDRESS);
