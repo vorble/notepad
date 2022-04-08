@@ -16,7 +16,7 @@ console.log('LISTEN_PORT=' + LISTEN_PORT);
 console.log('LISTEN_ADDRESS=' + LISTEN_ADDRESS);
 
 function validateFilename(filename) {
-  if (!/^[a-zA-Z0-9]{1,32}$/.test(filename)) {
+  if (!/^[._a-zA-Z0-9]{1,32}$/.test(filename) || filename == '.' || filename == '..') {
     throw new Error(`Invalid filename ${ JSON.stringify(filename) }.`);
   }
 }
