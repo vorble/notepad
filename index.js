@@ -240,10 +240,10 @@ textarea {
   margin-left: 1ch;
   margin-right: 1ch;
 
-  padding-top: 0px;
-  padding-bottom: 0px;
-  padding-left: 0px;
-  padding-right: 0px;
+  padding-top: .5em;
+  padding-bottom: .5em;
+  padding-left: 1ch;
+  padding-right: 1ch;
 
   width: calc(100vw - 2ch);
   height: calc(100vh - 1em);
